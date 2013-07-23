@@ -12,7 +12,9 @@
 extern NSString * const TBSiteNameMetadataKey;
 extern NSString * const TBSiteAuthorMetadataKey;
 extern NSString * const TBSiteBaseURLMetadataKey;
+extern NSString * const TBSiteBaseURLMetadataKey;
 extern NSString * const TBSiteNumberOfRecentPostsMetadataKey;
+extern NSString * const TBSiteFilters;
 
 extern NSString * const TBSiteProtocolKey;
 extern NSString * const TBSiteProtocolFTP;

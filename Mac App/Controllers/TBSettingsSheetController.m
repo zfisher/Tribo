@@ -18,6 +18,7 @@
 @property (nonatomic, assign) IBOutlet NSTextField *baseURLField;
 @property (nonatomic, assign) IBOutlet NSTextField *numberOfRecentPostsField;
 @property (nonatomic, assign) IBOutlet NSStepper *recentPostsStepper;
+@property (nonatomic, assign) IBOutlet NSPopUpButton *filtersPopUp;
 
 @property (nonatomic, assign) IBOutlet NSPopUpButton *uploadViaPopUp;
 @property (nonatomic, assign) IBOutlet NSTextField *serverField;
@@ -26,10 +27,14 @@
 @property (nonatomic, assign) IBOutlet NSSecureTextField *passwordField;
 @property (nonatomic, assign) IBOutlet NSTextField *remotePathField;
 
+@property (nonatomic, assign) NSInteger selectedFilterIndex;
+
 - (void)didEndSheet:(NSWindow *)sheet returnCode:(NSInteger)returnCode contextInfo:(void *)contextInfo;
 - (IBAction)save:(id)sender;
 - (IBAction)cancel:(id)sender;
 - (IBAction)uploadViaPopUpDidChange:(id)sender;
+- (IBAction)filterPopUpDidChange:(id)sender;
+- (IBAction)revealFilterDirectory:(id)sender;
 
 - (void)loadFormValues;
 - (void)updatePlaceholders;
@@ -59,6 +64,22 @@
 	[self updatePlaceholders];
 }
 
+- (IBAction)filterPopUpDidChange:(id)sender {
+    if (self.filtersPopUp.selectedItem.tag == -2) { // reveal in finder
+        [self.filtersPopUp selectItemAtIndex:self.selectedFilterIndex];
+        [self revealFilterDirectory:sender];
+    } else {
+        self.selectedFilterIndex = self.filtersPopUp.indexOfSelectedItem;
+    }
+}
+
+- (IBAction)revealFilterDirectory:(id)sender {
+    NSURL *scriptsURL = [[NSFileManager defaultManager] URLsForDirectory:NSApplicationScriptsDirectory inDomains:NSUserDomainMask][0];
+    [[NSFileManager defaultManager] createDirectoryAtPath:[scriptsURL path] withIntermediateDirectories:YES attributes:nil error:nil];
+    NSLog(@"scripts URL: %@",scriptsURL);
+    [[NSWorkspace sharedWorkspace] activateFileViewerSelectingURLs:@[scriptsURL]];
+}
+
 - (void)loadFormValues {
 	
 	NSDictionary *metadata = self.site.metadata;
@@ -84,7 +105,34 @@
 	self.remotePathField.stringValue = metadata[TBSiteRemotePathKey] ?: @"";
 	
 	self.passwordField.stringValue = [self passwordFromKeychain] ?: @"";
-	
+    
+    NSURL *scriptsDirectoryURL = [[NSFileManager defaultManager] URLsForDirectory:NSApplicationScriptsDirectory inDomains:NSUserDomainMask][0];
+    NSArray *scriptURLs = [[NSFileManager defaultManager] contentsOfDirectoryAtURL:scriptsDirectoryURL includingPropertiesForKeys:[NSArray arrayWithObject:NSURLNameKey] options:NSDirectoryEnumerationSkipsHiddenFiles error:nil];
+
+    [self.filtersPopUp removeAllItems];
+    for(NSURL *scriptURL in scriptURLs) {
+        [self.filtersPopUp addItemWithTitle:scriptURL.lastPathComponent];
+    }
+    [self.filtersPopUp addItemWithTitle:@"No Filter"];
+    [(NSMenuItem *)self.filtersPopUp.itemArray.lastObject setTag:-1];
+    [self.filtersPopUp.menu addItem:[NSMenuItem separatorItem]];
+    [self.filtersPopUp addItemWithTitle:@"Reveal Filter Directory in Finder…"];
+    [(NSMenuItem *)self.filtersPopUp.itemArray.lastObject setTag:-2];
+    
+    NSArray *filters = metadata[TBSiteFilters];
+    if (filters.count == 0) {
+        [self.filtersPopUp selectItemWithTag:-1];
+    } else if (filters.count == 1) {
+        [self.filtersPopUp selectItemWithTitle:((NSArray *)metadata[TBSiteFilters])[0]];
+    } else {
+        [self.filtersPopUp insertItemWithTitle:[filters componentsJoinedByString:@", "] atIndex:0];
+        [(NSMenuItem *)self.filtersPopUp.itemArray.lastObject setTag:-3];
+        [self.filtersPopUp selectItemAtIndex:0];
+    }
+    
+	[self.filtersPopUp synchronizeTitleAndSelectedItem];
+    
+    self.selectedFilterIndex = self.filtersPopUp.indexOfSelectedItem;
 }
 
 - (void)updatePlaceholders {
@@ -113,10 +161,15 @@
 		protocol = TBSiteProtocolFTP;
 	else if ([self.uploadViaPopUp.titleOfSelectedItem isEqualToString:@"SFTP"])
 		protocol = TBSiteProtocolSFTP;
+    NSArray *filters = @[];
+    if (self.filtersPopUp.selectedItem.tag != -1) {
+        filters = [self.filtersPopUp.selectedItem.title componentsSeparatedByString:@", "];
+    }
 	NSDictionary *values = @{TBSiteNameMetadataKey: self.siteNameField.stringValue,
 							TBSiteAuthorMetadataKey: self.authorField.stringValue,
 							TBSiteBaseURLMetadataKey: self.baseURLField.stringValue,
 							TBSiteNumberOfRecentPostsMetadataKey: numberOfRecentPosts,
+                            TBSiteFilters:filters,
 							TBSiteProtocolKey: protocol,
 							TBSiteServerKey: self.serverField.stringValue,
 							TBSitePortKey: self.portField.stringValue,
